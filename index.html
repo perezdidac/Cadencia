@@ -4,9 +4,94 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Cadència - Chord Progressions</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+      }
+    </script>
+    <style>
+      /* Hide scrollbar for Chrome, Safari and Opera */
+      .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+      }
+
+      /* Hide scrollbar for IE, Edge and Firefox */
+      .scrollbar-hide {
+          -ms-overflow-style: none;  /* IE and Edge */
+          scrollbar-width: none;  /* Firefox */
+      }
+    </style>
   </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+  <body class="">
+    <div id="root-container">
+      <div class="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans p-4 md:p-8 transition-colors duration-300">
+        <div class="max-w-[1400px] mx-auto space-y-8">
+
+          <!-- Header -->
+          <header class="flex flex-col sm:flex-row sm:items-start justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-6">
+            <div class="space-y-2">
+              <div class="flex items-center gap-3">
+                <i data-lucide="music" class="w-8 h-8 text-violet-500"></i>
+                <h1 class="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Cadència</h1>
+              </div>
+              <p class="text-slate-500 dark:text-slate-400" id="header-subtitle">Discover, filter, and listen to curated chord progressions in any key.</p>
+            </div>
+
+            <button id="theme-toggle" class="self-start p-2 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors shadow-sm" title="Toggle Dark Mode">
+              <i data-lucide="moon" class="w-5 h-5" id="theme-icon"></i>
+            </button>
+          </header>
+
+          <!-- Controls Section -->
+          <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
+
+            <!-- Settings Sidebar -->
+            <div id="sidebar" class="lg:col-span-1 space-y-6 lg:sticky lg:top-8 max-h-[calc(100vh-4rem)] overflow-y-auto pb-8 scrollbar-hide">
+              <!-- Will be populated by JS -->
+            </div>
+
+            <!-- Results Grid -->
+            <div class="lg:col-span-3 flex flex-col gap-6">
+
+              <!-- Chain Builder -->
+              <div class="bg-white dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                <div class="flex items-center justify-between mb-4">
+                  <div class="flex items-center gap-2">
+                    <i data-lucide="list-plus" class="w-5 h-5 text-violet-500"></i>
+                    <h2 class="text-xl font-bold text-slate-900 dark:text-white">Progression Chain</h2>
+                  </div>
+                  <div id="chain-controls" class="flex gap-2 items-center">
+                    <!-- Controls will go here -->
+                  </div>
+                </div>
+
+                <div id="chain-container">
+                  <!-- Will be populated by JS -->
+                </div>
+              </div>
+
+              <!-- Header above progressions -->
+              <div class="flex items-center justify-between bg-white dark:bg-slate-900/30 p-4 rounded-xl border border-slate-200 dark:border-slate-800/50 shadow-sm dark:shadow-none">
+                <h2 class="text-xl font-medium text-slate-900 dark:text-white" id="results-title">
+                  <!-- Title goes here -->
+                </h2>
+                <span class="text-sm px-3 py-1 bg-slate-100 text-slate-600 dark:bg-slate-800 rounded-full dark:text-slate-400 font-medium" id="results-count">
+                  0 results
+                </span>
+              </div>
+
+              <!-- Progressions Grid -->
+              <div id="progressions-container">
+                <!-- Will be populated by JS -->
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script src="app.js"></script>
   </body>
 </html>
