@@ -144,6 +144,24 @@ const PROGRESSIONS_DB = [
   { id: 98, scale: 'Major', roman: ['I', 'IV', 'ii', 'V7'], name: 'Motown Bounce', tags: ['R&B', 'Pop', 'Nostalgic'], desc: 'A swinging, upbeat progression that defined the sound of 1960s Detroit.' },
   { id: 99, scale: 'Minor', roman: ['i', 'bIII', 'IV', 'vi°'], name: 'Bluesy Diminished Walk', tags: ['Blues', 'Jazz', 'Dark'], desc: 'A gritty minor progression that uses a diminished chord to add intense passing tension.' },
 
+  // --- NON-TONIC STARTING PROGRESSIONS ---
+  { id: 111, scale: 'Major', roman: ['ii', 'V', 'I', 'vi'], name: 'Standard Jazz Turnaround', tags: ['Jazz', 'Smooth', 'Resolving'], desc: 'The most common turnaround in jazz, starting on the supertonic to create immediate forward motion.' },
+  { id: 112, scale: 'Major', roman: ['IV', 'V', 'iii', 'vi'], name: 'The Anime Progression', tags: ['Anime', 'Pop', 'Uplifting'], desc: 'A staple in Japanese pop music that creates a continuous, unresolved driving feeling by avoiding the tonic.' },
+  { id: 113, scale: 'Major', roman: ['vi', 'IV', 'I', 'V'], name: 'The Pop Punk Core', tags: ['Rock', 'Pop', 'Energetic'], desc: 'Starts on the relative minor for an angsty feel before hitting the major chords.' },
+  { id: 114, scale: 'Minor', roman: ['iv', 'v', 'i', 'i'], name: 'Minor Plagal Climb', tags: ['Dark', 'Dramatic', 'Cinematic'], desc: 'A heavy, trudging progression starting on the subdominant minor, climbing back to the root.' },
+  { id: 115, scale: 'Major', roman: ['iii', 'vi', 'ii', 'V'], name: 'Cycle of Fourths (Diatonic)', tags: ['Jazz', 'Smooth', 'Lo-Fi'], desc: 'A classic sequence of descending fifths/ascending fourths starting from the mediant.' },
+  { id: 116, scale: 'Minor', roman: ['bVI', 'bVII', 'i', 'i'], name: 'Epic Minor Climb', tags: ['Epic', 'Rock', 'Cinematic'], desc: 'The "Mario Staircase" in a minor context. Extremely heroic and resolving.' },
+  { id: 117, scale: 'Major', roman: ['IVmaj7', 'Imaj7', 'IVmaj7', 'Imaj7'], name: 'Lydian Float', tags: ['Lo-Fi', 'Smooth', 'Dreamy'], desc: 'A peaceful, floating vamp bouncing between the Lydian IV and the tonic.' },
+  { id: 118, scale: 'Minor', roman: ['ii°', 'V7', 'i', 'i'], name: 'Minor 2-5-1', tags: ['Jazz', 'Classical', 'Sad'], desc: 'The fundamental minor jazz turnaround starting with a dark diminished/half-diminished feel.' },
+  { id: 119, scale: 'Major', roman: ['bVII', 'IV', 'I', 'I'], name: 'Mixolydian Drop', tags: ['Rock', 'Blues', 'Energetic'], desc: 'A classic rock staple dropping from the flat 7th back home.' },
+  { id: 120, scale: 'Minor', roman: ['v', 'iv', 'i', 'i'], name: 'Phrygian Lament', tags: ['Sad', 'Dark', 'Classical'], desc: 'A mournful descent starting from the minor dominant.' },
+  { id: 121, scale: 'Major', roman: ['vi', 'V', 'IV', 'III7'], name: 'Flamenco Descent', tags: ['Dramatic', 'Tense', 'Cinematic'], desc: 'Walking down from the relative minor, ending on a tense secondary dominant.' },
+  { id: 122, scale: 'Minor', roman: ['bIII', 'bVII', 'iv', 'i'], name: 'Modal Minor Journey', tags: ['Folk', 'Rock', 'Epic'], desc: 'Starts on the relative major, taking a winding path back to the minor root.' },
+  { id: 123, scale: 'Major', roman: ['IV', 'iv', 'I', 'I'], name: 'Plagal Heartbreak', tags: ['Sad', 'Romantic', 'Nostalgic'], desc: 'The major IV melts into the minor iv before resolving home. Very emotional.' },
+  { id: 124, scale: 'Major', roman: ['ii7', 'v7', 'Imaj7', 'vi7'], name: 'Neo-Soul Slip', tags: ['R&B', 'Smooth', 'Lo-Fi'], desc: 'A variation of the 2-5-1 using a minor v7 for a distinctly smooth, modern R&B feel.' },
+  { id: 125, scale: 'Minor', roman: ['bVI', 'v', 'iv', 'v'], name: 'Dark Techno Loop', tags: ['EDM', 'Dark', 'Tense'], desc: 'A brooding, unresolved loop circling the lower half of the minor scale.' },
+  { id: 126, scale: 'Major', roman: ['V', 'IV', 'I', 'I'], name: 'Reverse Rock Anthem', tags: ['Rock', 'Nostalgic', 'Energetic'], desc: 'A straightforward, punchy rock progression rolling backwards from the dominant.' },
+
   // --- EXTENDED 8-CHORD PROGRESSIONS ---
   { id: 100, scale: 'Major', roman: ['I', 'IV', 'vii°', 'iii', 'vi', 'ii', 'V', 'I'], name: 'Diatonic Circle of 5ths', tags: ['Classical', 'Resolving', 'Uplifting'], desc: 'Travels flawlessly through every diatonic chord in the key, providing an incredibly satisfying journey back home.' },
   { id: 101, scale: 'Major', roman: ['I', 'V', 'vi', 'iii', 'IV', 'I', 'ii', 'V'], name: 'Pachelbel\'s Full Journey', tags: ['Classical', 'Uplifting', 'Sad', 'Epic'], desc: 'The complete 8-chord sequence of Pachelbel\'s Canon, blending triumph and melancholy.' },
@@ -197,6 +215,7 @@ const playChordTone = (freq, startTime, duration, waveformType = 'triangle') => 
   gain.gain.setValueAtTime(sustainGain, startTime + duration - 0.1); // Sustain
   gain.gain.linearRampToValueAtTime(0, startTime + duration); // Release
 
+  osc.__startTime = startTime; // Store to prevent stopping before start
   osc.start(startTime);
   osc.stop(startTime + duration);
 
@@ -210,6 +229,38 @@ const playChordTone = (freq, startTime, duration, waveformType = 'triangle') => 
       activeNodes.splice(idx, 1);
     }
   }, (duration * 1000) + 1000);
+};
+
+const playChordGroove = (notesMidi, startTime, duration, waveformType, groove) => {
+    if (groove === 'block') {
+        notesMidi.forEach(midiNote => {
+            const freq = 440 * Math.pow(2, (midiNote - 69) / 12);
+            playChordTone(freq, startTime, duration, waveformType);
+        });
+    } else if (groove === 'strum') {
+        const strumDelay = strumSpeed;
+        notesMidi.forEach((midiNote, i) => {
+            const freq = 440 * Math.pow(2, (midiNote - 69) / 12);
+            playChordTone(freq, startTime + (i * strumDelay), duration - (i * strumDelay), waveformType);
+        });
+    } else if (groove === 'arpeggio') {
+        const noteDuration = duration / notesMidi.length;
+        notesMidi.forEach((midiNote, i) => {
+            const freq = 440 * Math.pow(2, (midiNote - 69) / 12);
+            playChordTone(freq, startTime + (i * noteDuration), noteDuration * 1.2, waveformType); // slight overlap
+        });
+    } else if (groove === 'pulse') {
+        const pulses = 4;
+        const pulseDuration = duration / pulses;
+        for (let p = 0; p < pulses; p++) {
+            notesMidi.forEach(midiNote => {
+                const freq = 440 * Math.pow(2, (midiNote - 69) / 12);
+                // Make the first pulse of the chord slightly longer/louder by adjusting duration slightly
+                const dur = p === 0 ? pulseDuration * 0.8 : pulseDuration * 0.6;
+                playChordTone(freq, startTime + (p * pulseDuration), dur, waveformType);
+            });
+        }
+    }
 };
 
 const stopAllAudio = () => {
@@ -226,7 +277,9 @@ const stopAllAudio = () => {
       gain.gain.setValueAtTime(currentValue, now);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.05);
 
-      osc.stop(now + 0.05);
+      // If the oscillator was scheduled to start in the future, stop it after it starts
+      const stopTime = Math.max(now + 0.05, (osc.__startTime || 0) + 0.01);
+      osc.stop(stopTime);
 
       // Fully disconnect the nodes shortly after stopping
       setTimeout(() => {
@@ -282,6 +335,8 @@ let chain = [];
 let playbackTimers = [];
 let chordDuration = 1.3;
 let masterVolume = 0.8;
+let currentGroove = 'block';
+let strumSpeed = 0.04;
 
 // --- LOGIC FUNCTIONS ---
 const getNoteArray = () => {
@@ -347,11 +402,8 @@ const handlePlay = (progressionId) => {
       const details = getChordDetails(numeral);
       const chordStartTime = startTime + (idx * chordDuration);
 
-      // Schedule audio
-      details.notesMidi.forEach(midiNote => {
-        const freq = 440 * Math.pow(2, (midiNote - 69) / 12);
-        playChordTone(freq, chordStartTime, chordDuration, synthSound);
-      });
+      // Schedule audio with current groove
+      playChordGroove(details.notesMidi, chordStartTime, chordDuration, synthSound, currentGroove);
 
       // Schedule UI updates
       const timerId = setTimeout(() => {
@@ -388,10 +440,8 @@ const handlePlayChain = () => {
       const details = getChordDetails(numeral);
       const chordStartTime = startTime + (idx * chordDuration);
 
-      details.notesMidi.forEach(midiNote => {
-        const freq = 440 * Math.pow(2, (midiNote - 69) / 12);
-        playChordTone(freq, chordStartTime, chordDuration, synthSound);
-      });
+      // Schedule audio with current groove
+      playChordGroove(details.notesMidi, chordStartTime, chordDuration, synthSound, currentGroove);
 
       const timerId = setTimeout(() => {
         if (playingState.id === 'chain') {
@@ -486,6 +536,12 @@ const changeSynthSound = (sound) => {
     renderApp();
 };
 
+const setGroove = (style) => {
+    currentGroove = style;
+    if (playingState.id) stopPlayback();
+    renderApp();
+};
+
 const setVolume = (val) => {
     masterVolume = parseFloat(val);
     if (masterGainNode) {
@@ -495,6 +551,10 @@ const setVolume = (val) => {
 
 const setSpeed = (val) => {
     chordDuration = parseFloat(val);
+};
+
+const setStrumSpeed = (val) => {
+    strumSpeed = parseFloat(val);
 };
 
 const clearChain = () => {
@@ -565,6 +625,41 @@ const renderSidebar = () => {
                            oninput="setVolume(this.value); document.getElementById('volume-label').innerText = Math.round(this.value * 100) + '%'"
                            class="w-full accent-violet-500 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer dark:bg-slate-700">
                 </div>
+
+                <div class="space-y-1 ${currentGroove === 'strum' ? 'block' : 'hidden'}">
+                    <div class="flex justify-between items-center text-xs text-slate-500 dark:text-slate-400">
+                        <span>Strum Speed</span>
+                        <span id="strum-speed-label">${strumSpeed}s</span>
+                    </div>
+                    <input type="range" min="0.01" max="0.15" step="0.01" value="${strumSpeed}"
+                           oninput="setStrumSpeed(this.value); document.getElementById('strum-speed-label').innerText = this.value + 's'"
+                           class="w-full accent-violet-500 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer dark:bg-slate-700">
+                </div>
+            </div>
+        </div>
+
+        <!-- Groove / Rhythm Selection -->
+        <div class="space-y-4 bg-white dark:bg-slate-900/50 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-none">
+            <div class="flex items-center gap-2">
+                <i data-lucide="music-4" class="w-4 h-4 text-slate-500 dark:text-slate-400"></i>
+                <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Groove / Rhythm</h3>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+    `;
+
+    const grooves = [
+        { id: 'block', label: 'Block' },
+        { id: 'strum', label: 'Strum' },
+        { id: 'arpeggio', label: 'Arpeggio' },
+        { id: 'pulse', label: 'Pulse' }
+    ];
+
+    grooves.forEach(grv => {
+        const activeClass = currentGroove === grv.id ? 'bg-violet-500 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white';
+        html += `<button onclick="setGroove('${grv.id}')" class="py-2 rounded-md text-sm font-medium transition-all ${activeClass}">${grv.label}</button>`;
+    });
+
+    html += `
             </div>
         </div>
 
