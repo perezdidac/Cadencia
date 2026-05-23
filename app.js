@@ -238,7 +238,7 @@ const playChordGroove = (notesMidi, startTime, duration, waveformType, groove) =
             playChordTone(freq, startTime, duration, waveformType);
         });
     } else if (groove === 'strum') {
-        const strumDelay = 0.04; // 40ms between notes
+        const strumDelay = strumSpeed;
         notesMidi.forEach((midiNote, i) => {
             const freq = 440 * Math.pow(2, (midiNote - 69) / 12);
             playChordTone(freq, startTime + (i * strumDelay), duration - (i * strumDelay), waveformType);
@@ -336,6 +336,7 @@ let playbackTimers = [];
 let chordDuration = 1.3;
 let masterVolume = 0.8;
 let currentGroove = 'block';
+let strumSpeed = 0.04;
 
 // --- LOGIC FUNCTIONS ---
 const getNoteArray = () => {
@@ -552,6 +553,10 @@ const setSpeed = (val) => {
     chordDuration = parseFloat(val);
 };
 
+const setStrumSpeed = (val) => {
+    strumSpeed = parseFloat(val);
+};
+
 const clearChain = () => {
     chain = [];
     stopPlayback();
@@ -618,6 +623,16 @@ const renderSidebar = () => {
                     </div>
                     <input type="range" min="0" max="1" step="0.05" value="${masterVolume}"
                            oninput="setVolume(this.value); document.getElementById('volume-label').innerText = Math.round(this.value * 100) + '%'"
+                           class="w-full accent-violet-500 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer dark:bg-slate-700">
+                </div>
+
+                <div class="space-y-1 ${currentGroove === 'strum' ? 'block' : 'hidden'}">
+                    <div class="flex justify-between items-center text-xs text-slate-500 dark:text-slate-400">
+                        <span>Strum Speed</span>
+                        <span id="strum-speed-label">${strumSpeed}s</span>
+                    </div>
+                    <input type="range" min="0.01" max="0.15" step="0.01" value="${strumSpeed}"
+                           oninput="setStrumSpeed(this.value); document.getElementById('strum-speed-label').innerText = this.value + 's'"
                            class="w-full accent-violet-500 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer dark:bg-slate-700">
                 </div>
             </div>
