@@ -160,11 +160,15 @@ const PROGRESSIONS_DB = [
 
 // --- AUDIO ENGINE ---
 let audioCtx = null;
+let masterGainNode = null;
 let activeNodes = []; // Tracks currently playing oscillators and gains so we can stop them immediately
 
 const initAudio = () => {
   if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGainNode = audioCtx.createGain();
+    masterGainNode.connect(audioCtx.destination);
+    masterGainNode.gain.value = masterVolume;
   }
   if (audioCtx.state === 'suspended') {
     audioCtx.resume();
@@ -176,7 +180,7 @@ const playChordTone = (freq, startTime, duration, waveformType = 'triangle') => 
   const gain = audioCtx.createGain();
 
   osc.connect(gain);
-  gain.connect(audioCtx.destination);
+  gain.connect(masterGainNode);
 
   osc.type = waveformType;
   osc.frequency.value = freq;
@@ -276,6 +280,8 @@ let isDarkMode = false;
 let synthSound = 'triangle';
 let chain = [];
 let playbackTimers = [];
+let chordDuration = 1.3;
+let masterVolume = 0.8;
 
 // --- LOGIC FUNCTIONS ---
 const getNoteArray = () => {
@@ -335,17 +341,16 @@ const handlePlay = (progressionId) => {
     playingState = { id: progression.id, activeChordIdx: 0 };
     renderApp();
 
-    const CHORD_DURATION = 1.3; // seconds
     const startTime = audioCtx.currentTime + 0.1;
 
     progression.roman.forEach((numeral, idx) => {
       const details = getChordDetails(numeral);
-      const chordStartTime = startTime + (idx * CHORD_DURATION);
+      const chordStartTime = startTime + (idx * chordDuration);
 
       // Schedule audio
       details.notesMidi.forEach(midiNote => {
         const freq = 440 * Math.pow(2, (midiNote - 69) / 12);
-        playChordTone(freq, chordStartTime, CHORD_DURATION, synthSound);
+        playChordTone(freq, chordStartTime, chordDuration, synthSound);
       });
 
       // Schedule UI updates
@@ -363,7 +368,7 @@ const handlePlay = (progressionId) => {
     const endTimerId = setTimeout(() => {
       playingState = { id: null, activeChordIdx: null };
       renderApp();
-    }, (progression.roman.length * CHORD_DURATION * 1000) + 100);
+    }, (progression.roman.length * chordDuration * 1000) + 100);
 
     playbackTimers.push(endTimerId);
 };
@@ -377,16 +382,15 @@ const handlePlayChain = () => {
     renderApp();
 
     const combinedRoman = chain.flatMap(p => p.roman);
-    const CHORD_DURATION = 1.3;
     const startTime = audioCtx.currentTime + 0.1;
 
     combinedRoman.forEach((numeral, idx) => {
       const details = getChordDetails(numeral);
-      const chordStartTime = startTime + (idx * CHORD_DURATION);
+      const chordStartTime = startTime + (idx * chordDuration);
 
       details.notesMidi.forEach(midiNote => {
         const freq = 440 * Math.pow(2, (midiNote - 69) / 12);
-        playChordTone(freq, chordStartTime, CHORD_DURATION, synthSound);
+        playChordTone(freq, chordStartTime, chordDuration, synthSound);
       });
 
       const timerId = setTimeout(() => {
@@ -402,7 +406,7 @@ const handlePlayChain = () => {
     const endTimerId = setTimeout(() => {
       playingState = { id: null, activeChordIdx: null };
       renderApp();
-    }, (combinedRoman.length * CHORD_DURATION * 1000) + 100);
+    }, (combinedRoman.length * chordDuration * 1000) + 100);
 
     playbackTimers.push(endTimerId);
 };
@@ -441,6 +445,36 @@ const setRootKey = (idx) => {
     renderApp();
 };
 
+const generateRandomChain = () => {
+    stopPlayback();
+    const filteredProgressions = PROGRESSIONS_DB.filter(p => p.scale === keyType);
+    if (filteredProgressions.length === 0) return;
+
+    const newChain = [];
+
+    // Pick the first progression randomly
+    const firstProg = filteredProgressions[Math.floor(Math.random() * filteredProgressions.length)];
+    newChain.push(firstProg);
+
+    for (let i = 1; i < 4; i++) {
+        const lastProg = newChain[newChain.length - 1];
+
+        // Find compatible progressions
+        const compatible = filteredProgressions.filter(p => isCompatible(lastProg, p));
+
+        if (compatible.length > 0) {
+            // Pick a random compatible progression
+            newChain.push(compatible[Math.floor(Math.random() * compatible.length)]);
+        } else {
+            // Fallback: pick any random progression if no compatible ones exist
+            newChain.push(filteredProgressions[Math.floor(Math.random() * filteredProgressions.length)]);
+        }
+    }
+
+    chain = newChain;
+    renderApp();
+};
+
 const setTonality = (type) => {
     keyType = type;
     renderApp();
@@ -450,6 +484,17 @@ const changeSynthSound = (sound) => {
     synthSound = sound;
     if (playingState.id) stopPlayback();
     renderApp();
+};
+
+const setVolume = (val) => {
+    masterVolume = parseFloat(val);
+    if (masterGainNode) {
+        masterGainNode.gain.setValueAtTime(masterVolume, audioCtx.currentTime);
+    }
+};
+
+const setSpeed = (val) => {
+    chordDuration = parseFloat(val);
 };
 
 const clearChain = () => {
@@ -490,6 +535,36 @@ const renderSidebar = () => {
     });
 
     html += `
+            </div>
+        </div>
+
+        <!-- Playback Controls -->
+        <div class="space-y-4 bg-white dark:bg-slate-900/50 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-none">
+            <div class="flex items-center gap-2">
+                <i data-lucide="sliders-horizontal" class="w-4 h-4 text-slate-500 dark:text-slate-400"></i>
+                <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Playback Settings</h3>
+            </div>
+
+            <div class="space-y-3">
+                <div class="space-y-1">
+                    <div class="flex justify-between items-center text-xs text-slate-500 dark:text-slate-400">
+                        <span>Speed</span>
+                        <span id="speed-label">${chordDuration}s / chord</span>
+                    </div>
+                    <input type="range" min="0.5" max="2.5" step="0.1" value="${chordDuration}"
+                           oninput="setSpeed(this.value); document.getElementById('speed-label').innerText = this.value + 's / chord'"
+                           class="w-full accent-violet-500 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer dark:bg-slate-700">
+                </div>
+
+                <div class="space-y-1">
+                    <div class="flex justify-between items-center text-xs text-slate-500 dark:text-slate-400">
+                        <span>Volume</span>
+                        <span id="volume-label">${Math.round(masterVolume * 100)}%</span>
+                    </div>
+                    <input type="range" min="0" max="1" step="0.05" value="${masterVolume}"
+                           oninput="setVolume(this.value); document.getElementById('volume-label').innerText = Math.round(this.value * 100) + '%'"
+                           class="w-full accent-violet-500 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer dark:bg-slate-700">
+                </div>
             </div>
         </div>
 
@@ -553,8 +628,15 @@ const renderChain = () => {
     const chainControls = document.getElementById('chain-controls');
     const chainContainer = document.getElementById('chain-container');
 
+    const randomBtnHTML = `
+        <button onclick="generateRandomChain()" class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 text-sm font-medium rounded-lg transition-colors shadow-sm" title="Generate Random Chain">
+            <i data-lucide="dices" class="w-4 h-4"></i> Random
+        </button>
+    `;
+
     if (chain.length > 0) {
         chainControls.innerHTML = `
+            ${randomBtnHTML}
             <button onclick="clearChain()" class="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors">Clear All</button>
             <button onclick="${playingState.id === 'chain' ? 'stopPlayback()' : 'handlePlayChain()'}" class="flex items-center gap-1.5 px-4 py-1.5 bg-violet-500 hover:bg-violet-600 text-white text-sm font-medium rounded-lg transition-colors shadow-sm">
                 ${playingState.id === 'chain' ? '<i data-lucide="square" class="w-4 h-4 fill-current"></i> Stop' : '<i data-lucide="play" class="w-4 h-4 fill-current"></i> Play Chain'}
@@ -593,7 +675,7 @@ const renderChain = () => {
         chainContainer.innerHTML = html;
 
     } else {
-        chainControls.innerHTML = '';
+        chainControls.innerHTML = randomBtnHTML;
         chainContainer.innerHTML = `
             <p class="text-sm text-slate-500 dark:text-slate-400 italic bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800/50">
                 Add progressions from the list below to build and play a continuous song structure.
