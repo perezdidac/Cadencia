@@ -1,6 +1,3 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Play, Square, Music, Filter, Check, Sun, Moon, Activity, Plus, X, Sparkles, ListPlus } from 'lucide-react';
-
 // --- MUSIC THEORY DATA & HELPERS ---
 
 const NOTES_SHARP = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -270,22 +267,18 @@ const isCompatible = (lastProg, nextProg) => {
   return allowedNext.includes(nextBase);
 };
 
-// --- MAIN COMPONENT ---
+// --- APP STATE ---
+let rootKeyIndex = 0; // 0 = C
+let keyType = 'Major';
+let activeTags = [];
+let playingState = { id: null, activeChordIdx: null };
+let isDarkMode = false;
+let synthSound = 'triangle';
+let chain = [];
+let playbackTimers = [];
 
-export default function App() {
-  const [rootKeyIndex, setRootKeyIndex] = useState(0); // 0 = C
-  const [keyType, setKeyType] = useState('Major');
-  const [activeTags, setActiveTags] = useState([]);
-  const [playingState, setPlayingState] = useState({ id: null, activeChordIdx: null });
-  const [isDarkMode, setIsDarkMode] = useState(false);
-  const [synthSound, setSynthSound] = useState('triangle');
-  const [chain, setChain] = useState([]); // Progression Chain state
-
-  // Set up playback timers ref
-  const playbackTimers = useRef([]);
-
-  // Get correct note array (flats vs sharps) based on selected key
-  const getNoteArray = () => {
+// --- LOGIC FUNCTIONS ---
+const getNoteArray = () => {
     const rootNoteSharp = NOTES_SHARP[rootKeyIndex];
     let keyString = rootNoteSharp;
     if (keyType === 'Minor') {
@@ -296,21 +289,16 @@ export default function App() {
       return NOTES_FLAT;
     }
     return NOTES_SHARP;
-  };
+};
 
-  const currentNotes = getNoteArray();
-  const rootNoteName = currentNotes[rootKeyIndex];
-
-  // Derive chords for a progression
-  const getChordDetails = (numeral) => {
+const getChordDetails = (numeral) => {
+    const currentNotes = getNoteArray();
     const mapping = NUMERAL_MAP[numeral];
     if (!mapping) return { name: '?', type: '', notesMidi: [] };
 
-    // Calculate root of the chord relative to the Key Root
     const chordRootIndex = (rootKeyIndex + mapping.s) % 12;
     const chordRootName = currentNotes[chordRootIndex];
 
-    // Formatting the display name beautifully
     let displayType = mapping.t;
     if (displayType === 'm') displayType = 'm';
     else if (displayType === 'maj7') displayType = 'maj7';
@@ -322,28 +310,30 @@ export default function App() {
 
     const chordName = `${chordRootName}${displayType}`;
 
-    // Calculate MIDI-like note numbers for audio (C3 = 48)
     const baseMidi = 48 + ((rootKeyIndex + mapping.s) % 12);
-
     const intervals = CHORD_INTERVALS[mapping.t] || CHORD_INTERVALS[''];
     const notesMidi = intervals.map(interval => baseMidi + interval);
 
     return { name: chordName, type: mapping.t, notesMidi };
-  };
+};
 
-  // Stop everything
-  const stopPlayback = () => {
-    playbackTimers.current.forEach(clearTimeout);
-    playbackTimers.current = [];
+const stopPlayback = () => {
+    playbackTimers.forEach(clearTimeout);
+    playbackTimers = [];
     stopAllAudio();
-    setPlayingState({ id: null, activeChordIdx: null });
-  };
+    playingState = { id: null, activeChordIdx: null };
+    renderApp();
+};
 
-  const handlePlay = (progression) => {
+const handlePlay = (progressionId) => {
+    const progression = PROGRESSIONS_DB.find(p => p.id === progressionId);
+    if (!progression) return;
+
     initAudio();
     stopPlayback(); // Kills everything immediately
 
-    setPlayingState({ id: progression.id, activeChordIdx: 0 });
+    playingState = { id: progression.id, activeChordIdx: 0 };
+    renderApp();
 
     const CHORD_DURATION = 1.3; // seconds
     const startTime = audioCtx.currentTime + 0.1;
@@ -360,26 +350,31 @@ export default function App() {
 
       // Schedule UI updates
       const timerId = setTimeout(() => {
-        setPlayingState(prev => prev.id === progression.id ? { ...prev, activeChordIdx: idx } : prev);
+        if (playingState.id === progression.id) {
+            playingState.activeChordIdx = idx;
+            renderApp();
+        }
       }, (chordStartTime - audioCtx.currentTime) * 1000);
 
-      playbackTimers.current.push(timerId);
+      playbackTimers.push(timerId);
     });
 
     // Reset UI when finished
     const endTimerId = setTimeout(() => {
-      setPlayingState({ id: null, activeChordIdx: null });
+      playingState = { id: null, activeChordIdx: null };
+      renderApp();
     }, (progression.roman.length * CHORD_DURATION * 1000) + 100);
 
-    playbackTimers.current.push(endTimerId);
-  };
+    playbackTimers.push(endTimerId);
+};
 
-  const handlePlayChain = () => {
+const handlePlayChain = () => {
     if (chain.length === 0) return;
     initAudio();
     stopPlayback();
 
-    setPlayingState({ id: 'chain', activeChordIdx: 0 });
+    playingState = { id: 'chain', activeChordIdx: 0 };
+    renderApp();
 
     const combinedRoman = chain.flatMap(p => p.roman);
     const CHORD_DURATION = 1.3;
@@ -395,373 +390,342 @@ export default function App() {
       });
 
       const timerId = setTimeout(() => {
-        setPlayingState(prev => prev.id === 'chain' ? { ...prev, activeChordIdx: idx } : prev);
+        if (playingState.id === 'chain') {
+            playingState.activeChordIdx = idx;
+            renderApp();
+        }
       }, (chordStartTime - audioCtx.currentTime) * 1000);
 
-      playbackTimers.current.push(timerId);
+      playbackTimers.push(timerId);
     });
 
     const endTimerId = setTimeout(() => {
-      setPlayingState({ id: null, activeChordIdx: null });
+      playingState = { id: null, activeChordIdx: null };
+      renderApp();
     }, (combinedRoman.length * CHORD_DURATION * 1000) + 100);
 
-    playbackTimers.current.push(endTimerId);
-  };
+    playbackTimers.push(endTimerId);
+};
 
-  const addToChain = (prog) => {
-    setChain(prev => [...prev, prog]);
-  };
-
-  const removeFromChain = (index) => {
-    setChain(prev => prev.filter((_, i) => i !== index));
-    if (playingState.id === 'chain') stopPlayback();
-  };
-
-  // Filtering
-  const toggleTag = (tag) => {
-    setActiveTags(prev =>
-      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
-    );
-  };
-
-  const filteredProgressions = PROGRESSIONS_DB.filter(p => {
-    if (p.scale !== keyType) return false;
-    if (activeTags.length > 0) {
-      const hasMatchingTag = activeTags.some(tag => p.tags.includes(tag));
-      if (!hasMatchingTag) return false;
+const addToChain = (progId) => {
+    const progression = PROGRESSIONS_DB.find(p => p.id === progId);
+    if(progression) {
+        chain.push(progression);
+        renderApp();
     }
-    return true;
-  });
+};
 
-  // Cleanup audio on unmount
-  useEffect(() => {
-    return () => stopPlayback();
-  }, []);
+const removeFromChain = (index) => {
+    chain = chain.filter((_, i) => i !== index);
+    if (playingState.id === 'chain') stopPlayback();
+    renderApp();
+};
 
-  return (
-    <div className={isDarkMode ? 'dark' : ''}>
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans p-4 md:p-8 transition-colors duration-300">
-        <div className="max-w-[1400px] mx-auto space-y-8">
+const toggleTag = (tag) => {
+    if (activeTags.includes(tag)) {
+        activeTags = activeTags.filter(t => t !== tag);
+    } else {
+        activeTags.push(tag);
+    }
+    renderApp();
+};
 
-          {/* Header */}
-          <header className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-6">
-            <div className="space-y-2">
-              <div className="flex items-center gap-3">
-                <Music className="w-8 h-8 text-violet-500" />
-                <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Cadència</h1>
-              </div>
-              <p className="text-slate-500 dark:text-slate-400">Discover, filter, and listen to {PROGRESSIONS_DB.length} curated chord progressions in any key.</p>
+const clearTags = () => {
+    activeTags = [];
+    renderApp();
+};
+
+const setRootKey = (idx) => {
+    rootKeyIndex = idx;
+    stopPlayback();
+    renderApp();
+};
+
+const setTonality = (type) => {
+    keyType = type;
+    renderApp();
+};
+
+const changeSynthSound = (sound) => {
+    synthSound = sound;
+    if (playingState.id) stopPlayback();
+    renderApp();
+};
+
+const clearChain = () => {
+    chain = [];
+    stopPlayback();
+    renderApp();
+};
+
+const toggleTheme = () => {
+    isDarkMode = !isDarkMode;
+    renderApp();
+};
+// --- RENDERING FUNCTIONS ---
+
+const renderSidebar = () => {
+    const sidebar = document.getElementById('sidebar');
+    if (!sidebar) return;
+
+    const notesToDisplay = (FLAT_KEYS.includes(NOTES_SHARP[rootKeyIndex]) || ['D#', 'G#', 'A#'].includes(NOTES_SHARP[rootKeyIndex])) ? NOTES_FLAT : NOTES_SHARP;
+
+    let html = `
+        <!-- Key Selection -->
+        <div class="space-y-4 bg-white dark:bg-slate-900/50 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-none">
+            <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Key & Tonality</h3>
+
+            <div class="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
+                <button onclick="setTonality('Major')" class="flex-1 py-2 text-sm font-medium rounded-md transition-colors ${keyType === 'Major' ? 'bg-violet-500 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}">Major</button>
+                <button onclick="setTonality('Minor')" class="flex-1 py-2 text-sm font-medium rounded-md transition-colors ${keyType === 'Minor' ? 'bg-violet-500 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}">Minor</button>
             </div>
 
-            <button
-              onClick={() => setIsDarkMode(!isDarkMode)}
-              className="self-start p-2 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors shadow-sm"
-              title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
-            >
-              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </button>
-          </header>
+            <div class="grid grid-cols-4 gap-2">
+    `;
 
-          {/* Controls Section */}
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+    NOTES_SHARP.forEach((note, idx) => {
+        const displayNote = (FLAT_KEYS.includes(note) || ['D#', 'G#', 'A#'].includes(note)) ? NOTES_FLAT[idx] : note;
+        const activeClass = rootKeyIndex === idx ? 'bg-violet-500 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white';
+        html += `<button onclick="setRootKey(${idx})" class="py-2 rounded-md text-sm font-medium transition-all ${activeClass}">${displayNote}</button>`;
+    });
 
-            {/* Settings Sidebar */}
-            <div className="lg:col-span-1 space-y-6 lg:sticky lg:top-8 max-h-[calc(100vh-4rem)] overflow-y-auto pb-8 scrollbar-hide">
-
-              {/* Key Selection */}
-              <div className="space-y-4 bg-white dark:bg-slate-900/50 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-none">
-                <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Key & Tonality</h3>
-
-                <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
-                  <button
-                    onClick={() => setKeyType('Major')}
-                    className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${keyType === 'Major' ? 'bg-violet-500 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
-                  >
-                    Major
-                  </button>
-                  <button
-                    onClick={() => setKeyType('Minor')}
-                    className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${keyType === 'Minor' ? 'bg-violet-500 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
-                  >
-                    Minor
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-4 gap-2">
-                  {NOTES_SHARP.map((note, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => {
-                          setRootKeyIndex(idx);
-                          stopPlayback();
-                      }}
-                      className={`py-2 rounded-md text-sm font-medium transition-all ${
-                        rootKeyIndex === idx
-                          ? 'bg-violet-500 text-white shadow-md'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white'
-                      }`}
-                    >
-                      {(FLAT_KEYS.includes(note) || ['D#', 'G#', 'A#'].includes(note)) ? NOTES_FLAT[idx] : note}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Synth Sound Selection */}
-              <div className="space-y-4 bg-white dark:bg-slate-900/50 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-none">
-                <div className="flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-                  <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Synth Sound</h3>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { id: 'triangle', label: 'Mellow' },
-                    { id: 'sawtooth', label: 'Sharp' },
-                    { id: 'square', label: 'Retro' },
-                    { id: 'sine', label: 'Pure' }
-                  ].map(snd => (
-                    <button
-                      key={snd.id}
-                      onClick={() => {
-                        setSynthSound(snd.id);
-                        if (playingState.id) stopPlayback();
-                      }}
-                      className={`py-2 rounded-md text-sm font-medium transition-all ${
-                        synthSound === snd.id
-                          ? 'bg-violet-500 text-white shadow-md'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white'
-                      }`}
-                    >
-                      {snd.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Filter Tags */}
-              <div className="space-y-4 bg-white dark:bg-slate-900/50 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-none">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Filter className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-                    <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Mood & Genre</h3>
-                  </div>
-                  {activeTags.length > 0 && (
-                    <button
-                      onClick={() => setActiveTags([])}
-                      className="text-xs text-violet-500 hover:text-violet-600 dark:text-violet-400 dark:hover:text-violet-300 transition-colors"
-                    >
-                      Clear All
-                    </button>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {ALL_TAGS.map(tag => {
-                    const isActive = activeTags.includes(tag);
-                    return (
-                      <button
-                        key={tag}
-                        onClick={() => toggleTag(tag)}
-                        className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all flex items-center gap-1.5 ${
-                          isActive
-                            ? 'bg-violet-100 border-violet-500 text-violet-700 dark:bg-violet-500/20 dark:border-violet-500 dark:text-violet-300 shadow-sm'
-                            : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-400 dark:hover:border-slate-500'
-                        }`}
-                      >
-                        {isActive && <Check className="w-3 h-3" />}
-                        {tag}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+    html += `
             </div>
-
-            {/* Results Grid */}
-            <div className="lg:col-span-3 flex flex-col gap-6">
-
-              {/* Chain Builder */}
-              <div className="bg-white dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <ListPlus className="w-5 h-5 text-violet-500" />
-                    <h2 className="text-xl font-bold text-slate-900 dark:text-white">Progression Chain</h2>
-                  </div>
-                  {chain.length > 0 && (
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => { setChain([]); stopPlayback(); }}
-                        className="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
-                      >
-                        Clear All
-                      </button>
-                      <button
-                        onClick={playingState.id === 'chain' ? stopPlayback : handlePlayChain}
-                        className="flex items-center gap-1.5 px-4 py-1.5 bg-violet-500 hover:bg-violet-600 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
-                      >
-                        {playingState.id === 'chain' ? <Square className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
-                        {playingState.id === 'chain' ? 'Stop' : 'Play Chain'}
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {chain.length === 0 ? (
-                  <p className="text-sm text-slate-500 dark:text-slate-400 italic bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800/50">
-                    Add progressions from the list below to build and play a continuous song structure.
-                  </p>
-                ) : (
-                  <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide items-stretch">
-                    {chain.map((prog, idx) => {
-                      // Calculate if this block is currently playing
-                      const priorChords = chain.slice(0, idx).reduce((acc, curr) => acc + curr.roman.length, 0);
-                      const isThisBlockPlaying = playingState.id === 'chain' &&
-                                                 playingState.activeChordIdx >= priorChords &&
-                                                 playingState.activeChordIdx < priorChords + prog.roman.length;
-
-                      return (
-                        <div key={`${prog.id}-${idx}`} className={`flex-shrink-0 flex flex-col min-w-[200px] p-4 rounded-xl border transition-all ${isThisBlockPlaying ? 'border-violet-500 bg-violet-50 dark:bg-slate-800 shadow-md' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50'}`}>
-                          <div className="flex items-start justify-between mb-2">
-                            <span className={`text-sm font-bold truncate pr-2 ${isThisBlockPlaying ? 'text-violet-700 dark:text-violet-300' : 'text-slate-700 dark:text-slate-200'}`}>
-                              {prog.name}
-                            </span>
-                            <button onClick={() => removeFromChain(idx)} className="text-slate-400 hover:text-red-500 transition-colors p-1 -mr-1">
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                          <div className="flex gap-1.5 text-xs font-mono mt-auto">
-                            {prog.roman.map((num, rIdx) => {
-                              const chordGlobalIdx = priorChords + rIdx;
-                              const isThisChordActive = playingState.id === 'chain' && playingState.activeChordIdx === chordGlobalIdx;
-                              return (
-                                <span key={rIdx} className={`px-1.5 py-0.5 rounded ${isThisChordActive ? 'bg-violet-500 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
-                                  {num}
-                                </span>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between bg-white dark:bg-slate-900/30 p-4 rounded-xl border border-slate-200 dark:border-slate-800/50 shadow-sm dark:shadow-none">
-                <h2 className="text-xl font-medium text-slate-900 dark:text-white">
-                  <span className="text-violet-500 dark:text-violet-400 font-bold">{rootNoteName} {keyType}</span> Progressions
-                </h2>
-                <span className="text-sm px-3 py-1 bg-slate-100 text-slate-600 dark:bg-slate-800 rounded-full dark:text-slate-400 font-medium">
-                  {filteredProgressions.length} results
-                </span>
-              </div>
-
-              {filteredProgressions.length === 0 ? (
-                <div className="text-center py-16 border border-slate-200 dark:border-slate-800 border-dashed rounded-2xl bg-white dark:bg-slate-900/20 shadow-sm">
-                  <p className="text-slate-500 dark:text-slate-400 text-lg mb-4">No progressions found matching these tags.</p>
-                  <button
-                    onClick={() => setActiveTags([])}
-                    className="px-6 py-2 bg-violet-500 hover:bg-violet-600 text-white rounded-lg transition-colors font-medium shadow-sm"
-                  >
-                    Clear filters
-                  </button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {filteredProgressions.map((prog) => {
-                    const isPlaying = playingState.id === prog.id;
-                    const isRecommended = chain.length > 0 && isCompatible(chain[chain.length - 1], prog);
-
-                    return (
-                      <div
-                        key={prog.id}
-                        className={`group relative overflow-hidden rounded-2xl border transition-all flex flex-col justify-between ${
-                          isPlaying
-                            ? 'border-violet-500 bg-violet-50/50 dark:bg-slate-800/80 ring-1 ring-violet-500 shadow-lg dark:shadow-[0_0_30px_rgba(139,92,246,0.15)] z-10'
-                            : isRecommended
-                              ? 'border-emerald-400 dark:border-emerald-500/50 bg-emerald-50/30 dark:bg-emerald-900/10 shadow-sm hover:shadow-md'
-                              : 'bg-white dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 hover:border-violet-300 dark:hover:border-slate-700 shadow-sm hover:shadow-md dark:shadow-none'
-                        }`}
-                      >
-                        <div className="p-5 flex-1 space-y-4">
-                          <div className="flex justify-between items-start">
-                            <div className="pr-2">
-                              {isRecommended && (
-                                <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-1">
-                                  <Sparkles className="w-3 h-3" /> Great Fit
-                                </div>
-                              )}
-                              <h3 className="font-semibold text-lg text-slate-900 dark:text-white mb-1.5 leading-tight">{prog.name}</h3>
-                              <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-3 leading-relaxed">{prog.desc}</p>
-                            </div>
-                            <div className="flex flex-col gap-2 flex-shrink-0">
-                              <button
-                                onClick={() => isPlaying ? stopPlayback() : handlePlay(prog)}
-                                className={`p-2.5 rounded-full transition-all ${
-                                  isPlaying
-                                    ? 'bg-violet-500 text-white shadow-lg shadow-violet-500/25'
-                                    : 'bg-slate-100 text-slate-600 hover:bg-violet-500 hover:text-white dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-violet-500 dark:hover:text-white group-hover:scale-105'
-                                }`}
-                                title="Preview"
-                              >
-                                {isPlaying ? <Square className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
-                              </button>
-                              <button
-                                onClick={() => addToChain(prog)}
-                                className="p-2.5 rounded-full bg-slate-100 text-slate-600 hover:bg-emerald-500 hover:text-white dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-emerald-500 dark:hover:text-white transition-all group-hover:scale-105"
-                                title="Add to Chain"
-                              >
-                                <Plus className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Chord Visualization */}
-                          <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide pt-2">
-                            {prog.roman.map((numeral, idx) => {
-                              const isChordActive = isPlaying && playingState.activeChordIdx === idx;
-                              const chordDetails = getChordDetails(numeral);
-
-                              return (
-                                <div
-                                  key={idx}
-                                  className={`flex flex-col items-center justify-center min-w-[64px] p-2.5 rounded-xl border transition-all duration-300 flex-shrink-0 ${
-                                    isChordActive
-                                      ? 'bg-violet-500 text-white border-violet-400 scale-105 shadow-lg shadow-violet-500/20'
-                                      : 'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-950 dark:text-slate-300 dark:border-slate-800'
-                                  }`}
-                                >
-                                  <span className={`text-lg font-bold tracking-tight ${isChordActive ? 'text-white' : 'text-slate-800 dark:text-slate-100'}`}>
-                                    {chordDetails.name}
-                                  </span>
-                                  <span className={`text-[10px] mt-0.5 font-mono ${isChordActive ? 'text-violet-200' : 'text-slate-500 dark:text-slate-500'}`}>
-                                    {numeral}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* Tags */}
-                        <div className="p-4 pt-0">
-                          <div className="flex flex-wrap gap-1.5 pt-3 border-t border-slate-100 dark:border-slate-800/50">
-                            {prog.tags.map(tag => (
-                              <span key={tag} className="text-[9px] uppercase tracking-wider font-semibold px-2 py-1 rounded bg-slate-100 text-slate-500 dark:bg-slate-800/80 dark:text-slate-400">
-                                {tag}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
         </div>
-      </div>
-    </div>
-  );
-}
+
+        <!-- Synth Sound Selection -->
+        <div class="space-y-4 bg-white dark:bg-slate-900/50 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-none">
+            <div class="flex items-center gap-2">
+                <i data-lucide="activity" class="w-4 h-4 text-slate-500 dark:text-slate-400"></i>
+                <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Synth Sound</h3>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+    `;
+
+    const sounds = [
+        { id: 'triangle', label: 'Mellow' },
+        { id: 'sawtooth', label: 'Sharp' },
+        { id: 'square', label: 'Retro' },
+        { id: 'sine', label: 'Pure' }
+    ];
+
+    sounds.forEach(snd => {
+        const activeClass = synthSound === snd.id ? 'bg-violet-500 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white';
+        html += `<button onclick="changeSynthSound('${snd.id}')" class="py-2 rounded-md text-sm font-medium transition-all ${activeClass}">${snd.label}</button>`;
+    });
+
+    html += `
+            </div>
+        </div>
+
+        <!-- Filter Tags -->
+        <div class="space-y-4 bg-white dark:bg-slate-900/50 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-none">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="filter" class="w-4 h-4 text-slate-500 dark:text-slate-400"></i>
+                    <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Mood & Genre</h3>
+                </div>
+                ${activeTags.length > 0 ? `<button onclick="clearTags()" class="text-xs text-violet-500 hover:text-violet-600 dark:text-violet-400 dark:hover:text-violet-300 transition-colors">Clear All</button>` : ''}
+            </div>
+            <div class="flex flex-wrap gap-2">
+    `;
+
+    ALL_TAGS.forEach(tag => {
+        const isActive = activeTags.includes(tag);
+        const activeClass = isActive ? 'bg-violet-100 border-violet-500 text-violet-700 dark:bg-violet-500/20 dark:border-violet-500 dark:text-violet-300 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-400 dark:hover:border-slate-500';
+        html += `
+            <button onclick="toggleTag('${tag}')" class="px-3 py-1.5 rounded-full text-xs font-medium border transition-all flex items-center gap-1.5 ${activeClass}">
+                ${isActive ? `<i data-lucide="check" class="w-3 h-3"></i>` : ''}
+                ${tag}
+            </button>
+        `;
+    });
+
+    html += `
+            </div>
+        </div>
+    `;
+
+    sidebar.innerHTML = html;
+};
+
+const renderChain = () => {
+    const chainControls = document.getElementById('chain-controls');
+    const chainContainer = document.getElementById('chain-container');
+
+    if (chain.length > 0) {
+        chainControls.innerHTML = `
+            <button onclick="clearChain()" class="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors">Clear All</button>
+            <button onclick="${playingState.id === 'chain' ? 'stopPlayback()' : 'handlePlayChain()'}" class="flex items-center gap-1.5 px-4 py-1.5 bg-violet-500 hover:bg-violet-600 text-white text-sm font-medium rounded-lg transition-colors shadow-sm">
+                ${playingState.id === 'chain' ? '<i data-lucide="square" class="w-4 h-4 fill-current"></i> Stop' : '<i data-lucide="play" class="w-4 h-4 fill-current"></i> Play Chain'}
+            </button>
+        `;
+
+        let html = '<div class="flex gap-3 overflow-x-auto pb-2 scrollbar-hide items-stretch">';
+        chain.forEach((prog, idx) => {
+            const priorChords = chain.slice(0, idx).reduce((acc, curr) => acc + curr.roman.length, 0);
+            const isThisBlockPlaying = playingState.id === 'chain' &&
+                                       playingState.activeChordIdx >= priorChords &&
+                                       playingState.activeChordIdx < priorChords + prog.roman.length;
+
+            const blockClass = isThisBlockPlaying ? 'border-violet-500 bg-violet-50 dark:bg-slate-800 shadow-md' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50';
+            const titleClass = isThisBlockPlaying ? 'text-violet-700 dark:text-violet-300' : 'text-slate-700 dark:text-slate-200';
+
+            html += `
+                <div class="flex-shrink-0 flex flex-col min-w-[200px] p-4 rounded-xl border transition-all ${blockClass}">
+                    <div class="flex items-start justify-between mb-2">
+                        <span class="text-sm font-bold truncate pr-2 ${titleClass}">${prog.name}</span>
+                        <button onclick="removeFromChain(${idx})" class="text-slate-400 hover:text-red-500 transition-colors p-1 -mr-1"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
+                    </div>
+                    <div class="flex gap-1.5 text-xs font-mono mt-auto">
+            `;
+
+            prog.roman.forEach((num, rIdx) => {
+                const chordGlobalIdx = priorChords + rIdx;
+                const isThisChordActive = playingState.id === 'chain' && playingState.activeChordIdx === chordGlobalIdx;
+                const chordClass = isThisChordActive ? 'bg-violet-500 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400';
+                html += `<span class="px-1.5 py-0.5 rounded ${chordClass}">${num}</span>`;
+            });
+
+            html += `</div></div>`;
+        });
+        html += '</div>';
+        chainContainer.innerHTML = html;
+
+    } else {
+        chainControls.innerHTML = '';
+        chainContainer.innerHTML = `
+            <p class="text-sm text-slate-500 dark:text-slate-400 italic bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800/50">
+                Add progressions from the list below to build and play a continuous song structure.
+            </p>
+        `;
+    }
+};
+
+const renderProgressions = () => {
+    const container = document.getElementById('progressions-container');
+    const titleEl = document.getElementById('results-title');
+    const countEl = document.getElementById('results-count');
+
+    const currentNotes = getNoteArray();
+    const rootNoteName = currentNotes[rootKeyIndex];
+
+    const filteredProgressions = PROGRESSIONS_DB.filter(p => {
+        if (p.scale !== keyType) return false;
+        if (activeTags.length > 0) {
+            const hasMatchingTag = activeTags.some(tag => p.tags.includes(tag));
+            if (!hasMatchingTag) return false;
+        }
+        return true;
+    });
+
+    titleEl.innerHTML = `<span class="text-violet-500 dark:text-violet-400 font-bold">${rootNoteName} ${keyType}</span> Progressions`;
+    countEl.innerText = `${filteredProgressions.length} results`;
+
+    if (filteredProgressions.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-16 border border-slate-200 dark:border-slate-800 border-dashed rounded-2xl bg-white dark:bg-slate-900/20 shadow-sm">
+                <p class="text-slate-500 dark:text-slate-400 text-lg mb-4">No progressions found matching these tags.</p>
+                <button onclick="clearTags()" class="px-6 py-2 bg-violet-500 hover:bg-violet-600 text-white rounded-lg transition-colors font-medium shadow-sm">Clear filters</button>
+            </div>
+        `;
+        return;
+    }
+
+    let html = '<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">';
+
+    filteredProgressions.forEach(prog => {
+        const isPlaying = playingState.id === prog.id;
+        const isRecommended = chain.length > 0 && isCompatible(chain[chain.length - 1], prog);
+
+        let cardClass = 'bg-white dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 hover:border-violet-300 dark:hover:border-slate-700 shadow-sm hover:shadow-md dark:shadow-none';
+        if (isPlaying) cardClass = 'border-violet-500 bg-violet-50/50 dark:bg-slate-800/80 ring-1 ring-violet-500 shadow-lg dark:shadow-[0_0_30px_rgba(139,92,246,0.15)] z-10';
+        else if (isRecommended) cardClass = 'border-emerald-400 dark:border-emerald-500/50 bg-emerald-50/30 dark:bg-emerald-900/10 shadow-sm hover:shadow-md';
+
+        html += `
+            <div class="group relative overflow-hidden rounded-2xl border transition-all flex flex-col justify-between ${cardClass}">
+                <div class="p-5 flex-1 space-y-4">
+                    <div class="flex justify-between items-start">
+                        <div class="pr-2">
+                            ${isRecommended ? `<div class="flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-1"><i data-lucide="sparkles" class="w-3 h-3"></i> Great Fit</div>` : ''}
+                            <h3 class="font-semibold text-lg text-slate-900 dark:text-white mb-1.5 leading-tight">${prog.name}</h3>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 line-clamp-3 leading-relaxed">${prog.desc}</p>
+                        </div>
+                        <div class="flex flex-col gap-2 flex-shrink-0">
+                            <button onclick="${isPlaying ? 'stopPlayback()' : `handlePlay(${prog.id})`}" class="p-2.5 rounded-full transition-all ${isPlaying ? 'bg-violet-500 text-white shadow-lg shadow-violet-500/25' : 'bg-slate-100 text-slate-600 hover:bg-violet-500 hover:text-white dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-violet-500 dark:hover:text-white group-hover:scale-105'}" title="Preview">
+                                ${isPlaying ? '<i data-lucide="square" class="w-4 h-4 fill-current"></i>' : '<i data-lucide="play" class="w-4 h-4 fill-current ml-0.5"></i>'}
+                            </button>
+                            <button onclick="addToChain(${prog.id})" class="p-2.5 rounded-full bg-slate-100 text-slate-600 hover:bg-emerald-500 hover:text-white dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-emerald-500 dark:hover:text-white transition-all group-hover:scale-105" title="Add to Chain">
+                                <i data-lucide="plus" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide pt-2">
+        `;
+
+        prog.roman.forEach((numeral, idx) => {
+            const isChordActive = isPlaying && playingState.activeChordIdx === idx;
+            const chordDetails = getChordDetails(numeral);
+
+            const chordBoxClass = isChordActive ? 'bg-violet-500 text-white border-violet-400 scale-105 shadow-lg shadow-violet-500/20' : 'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-950 dark:text-slate-300 dark:border-slate-800';
+            const chordNameClass = isChordActive ? 'text-white' : 'text-slate-800 dark:text-slate-100';
+            const chordNumClass = isChordActive ? 'text-violet-200' : 'text-slate-500 dark:text-slate-500';
+
+            html += `
+                <div class="flex flex-col items-center justify-center min-w-[64px] p-2.5 rounded-xl border transition-all duration-300 flex-shrink-0 ${chordBoxClass}">
+                    <span class="text-lg font-bold tracking-tight ${chordNameClass}">${chordDetails.name}</span>
+                    <span class="text-[10px] mt-0.5 font-mono ${chordNumClass}">${numeral}</span>
+                </div>
+            `;
+        });
+
+        html += `
+                    </div>
+                </div>
+                <div class="p-4 pt-0">
+                    <div class="flex flex-wrap gap-1.5 pt-3 border-t border-slate-100 dark:border-slate-800/50">
+        `;
+
+        prog.tags.forEach(tag => {
+            html += `<span class="text-[9px] uppercase tracking-wider font-semibold px-2 py-1 rounded bg-slate-100 text-slate-500 dark:bg-slate-800/80 dark:text-slate-400">${tag}</span>`;
+        });
+
+        html += `
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    html += '</div>';
+    container.innerHTML = html;
+};
+
+const updateTheme = () => {
+    if (isDarkMode) {
+        document.documentElement.classList.add('dark');
+        document.getElementById('theme-icon').setAttribute('data-lucide', 'sun');
+        document.getElementById('theme-toggle').title = "Switch to Light Mode";
+    } else {
+        document.documentElement.classList.remove('dark');
+        document.getElementById('theme-icon').setAttribute('data-lucide', 'moon');
+        document.getElementById('theme-toggle').title = "Switch to Dark Mode";
+    }
+};
+
+const renderApp = () => {
+    updateTheme();
+    renderSidebar();
+    renderChain();
+    renderProgressions();
+    lucide.createIcons();
+};
+
+const init = () => {
+    document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+    renderApp();
+};
+
+// Initialize when DOM is ready
+document.addEventListener('DOMContentLoaded', init);
