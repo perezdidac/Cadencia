@@ -312,25 +312,33 @@ const stopAllAudio = () => {
   // Instantly fade out and stop all active nodes to prevent overlap/clicking
   activeNodes.forEach(({ osc, gain }) => {
     try {
-      gain.gain.cancelScheduledValues(now);
-
-      // Forcefully set a fast exponential decay to 0 to prevent audio clicking
-      const currentValue = gain.gain.value;
-      gain.gain.setValueAtTime(currentValue, now);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.05);
-
-      // If the oscillator was scheduled to start in the future, stop it after it starts
-      const stopTime = Math.max(now + 0.05, (osc.__startTime || 0) + 0.01);
-      osc.stop(stopTime);
-
-      // Fully disconnect the nodes shortly after stopping
-      setTimeout(() => {
+      if (osc.__startTime > now) {
+        // Oscillator is scheduled for the future, cancel everything and don't start/fade
+        gain.gain.cancelScheduledValues(now);
+        gain.gain.setValueAtTime(0, now);
         try {
           osc.disconnect();
           gain.disconnect();
         } catch(e) {}
-      }, 100);
+      } else {
+        gain.gain.cancelScheduledValues(now);
 
+        // Forcefully set a fast exponential decay to 0 to prevent audio clicking
+        const currentValue = gain.gain.value;
+        gain.gain.setValueAtTime(currentValue, now);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.05);
+
+        const stopTime = now + 0.05;
+        osc.stop(stopTime);
+
+        // Fully disconnect the nodes shortly after stopping
+        setTimeout(() => {
+          try {
+            osc.disconnect();
+            gain.disconnect();
+          } catch(e) {}
+        }, 100);
+      }
     } catch (e) {
       // Ignore nodes that already stopped naturally
     }
@@ -540,6 +548,52 @@ const clearTags = () => {
 const setRootKey = (idx) => {
     rootKeyIndex = idx;
     stopPlayback();
+    renderApp();
+};
+
+const handleDragStart = (e, index) => {
+    e.dataTransfer.setData('text/plain', index);
+    e.target.style.opacity = '0.5';
+};
+
+const handleDragEnd = (e) => {
+    e.target.style.opacity = '1';
+};
+
+const handleDragOver = (e) => {
+    e.preventDefault();
+};
+
+const handleDragEnter = (e) => {
+    e.preventDefault();
+    const target = e.currentTarget;
+    if (target) {
+        target.classList.add('border-violet-500', 'border-2');
+    }
+};
+
+const handleDragLeave = (e) => {
+    const target = e.currentTarget;
+    // ensure we don't trigger leave when entering child elements
+    if (e.relatedTarget && target.contains(e.relatedTarget)) {
+        return;
+    }
+    if (target) {
+        target.classList.remove('border-violet-500', 'border-2');
+    }
+};
+
+const handleDrop = (e, dropIndex) => {
+    e.preventDefault();
+    const dragIndex = parseInt(e.dataTransfer.getData('text/plain'), 10);
+
+    if (!isNaN(dragIndex) && dragIndex !== dropIndex) {
+        // Remove the item from the old position
+        const draggedItem = chain.splice(dragIndex, 1)[0];
+        // Insert it at the new position
+        chain.splice(dropIndex, 0, draggedItem);
+        if (playingState.id === 'chain') stopPlayback();
+    }
     renderApp();
 };
 
@@ -838,12 +892,22 @@ const renderChain = () => {
             const titleClass = isThisBlockPlaying ? 'text-violet-700 dark:text-violet-300' : 'text-slate-700 dark:text-slate-200';
 
             html += `
-                <div class="flex-shrink-0 flex flex-col min-w-[200px] p-4 rounded-xl border transition-all ${blockClass}">
-                    <div class="flex items-start justify-between mb-2">
+                <div draggable="true"
+                     ondragstart="handleDragStart(event, ${idx})"
+                     ondragend="handleDragEnd(event)"
+                     ondragover="handleDragOver(event)"
+                     ondrop="handleDrop(event, ${idx})"
+                     ondragenter="handleDragEnter(event)"
+                     ondragleave="handleDragLeave(event)"
+                     class="flex-shrink-0 flex flex-col min-w-[200px] p-4 rounded-xl border transition-all ${blockClass} cursor-grab active:cursor-grabbing">
+                    <div class="flex items-start justify-between mb-2 pointer-events-none">
                         <span class="text-sm font-bold truncate pr-2 ${titleClass}">${prog.name}</span>
-                        <button onclick="removeFromChain(${idx})" class="text-slate-400 hover:text-red-500 transition-colors p-1 -mr-1"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
+                        <div class="flex gap-1 pointer-events-auto">
+                            <button onclick="handlePlay(${prog.id})" class="text-slate-400 hover:text-violet-500 transition-colors p-1" title="Play"><i data-lucide="play" class="w-3.5 h-3.5"></i></button>
+                            <button onclick="removeFromChain(${idx})" class="text-slate-400 hover:text-red-500 transition-colors p-1 -mr-1" title="Remove"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
+                        </div>
                     </div>
-                    <div class="flex gap-1.5 text-xs font-mono mt-auto">
+                    <div class="flex gap-1.5 text-xs font-mono mt-auto pointer-events-none">
             `;
 
             prog.roman.forEach((num, rIdx) => {
