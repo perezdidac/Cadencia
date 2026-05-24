@@ -77,9 +77,15 @@
                 <h2 class="text-xl font-medium text-slate-900 dark:text-white" id="results-title">
                   <!-- Title goes here -->
                 </h2>
-                <span class="text-sm px-3 py-1 bg-slate-100 text-slate-600 dark:bg-slate-800 rounded-full dark:text-slate-400 font-medium" id="results-count">
-                  0 results
-                </span>
+                <div class="flex items-center gap-4">
+                  <div id="great-fit-container" class="hidden items-center gap-2">
+                    <input type="checkbox" id="great-fit-filter" class="w-4 h-4 rounded border-slate-300 text-violet-500 focus:ring-violet-500 dark:border-slate-600 dark:bg-slate-700 dark:ring-offset-slate-800" onchange="toggleGreatFitFilter()">
+                    <label for="great-fit-filter" class="text-sm text-slate-600 dark:text-slate-400 cursor-pointer">Great Fit Only</label>
+                  </div>
+                  <span class="text-sm px-3 py-1 bg-slate-100 text-slate-600 dark:bg-slate-800 rounded-full dark:text-slate-400 font-medium" id="results-count">
+                    0 results
+                  </span>
+                </div>
               </div>
 
               <!-- Progressions Grid -->
