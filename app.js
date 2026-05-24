@@ -379,6 +379,7 @@ let chordDuration = 1.3;
 let masterVolume = 0.8;
 let currentGroove = 'block';
 let strumSpeed = 0.04;
+let filterGreatFit = false;
 
 // --- LOGIC FUNCTIONS ---
 const getNoteArray = () => {
@@ -526,6 +527,11 @@ const toggleTag = (tag) => {
     renderApp();
 };
 
+const toggleGreatFitFilter = () => {
+    filterGreatFit = !filterGreatFit;
+    renderApp();
+};
+
 const clearTags = () => {
     activeTags = [];
     renderApp();
@@ -597,6 +603,40 @@ const setSpeed = (val) => {
 
 const setStrumSpeed = (val) => {
     strumSpeed = parseFloat(val);
+};
+
+const shareChain = () => {
+    if (chain.length === 0) return;
+
+    const state = {
+        k: rootKeyIndex,
+        t: keyType,
+        c: chain.map(p => p.id)
+    };
+
+    const base64State = btoa(JSON.stringify(state));
+    const url = new URL(window.location.href);
+    url.searchParams.set('s', base64State);
+
+    window.history.replaceState({}, '', url);
+
+    navigator.clipboard.writeText(url.toString()).then(() => {
+        const shareText = document.getElementById('share-text');
+        const shareIcon = document.querySelector('#share-btn i');
+        if (shareText && shareIcon) {
+            shareText.innerText = 'Copied!';
+            shareIcon.setAttribute('data-lucide', 'check');
+            lucide.createIcons();
+
+            setTimeout(() => {
+                shareText.innerText = 'Share';
+                shareIcon.setAttribute('data-lucide', 'share-2');
+                lucide.createIcons();
+            }, 2000);
+        }
+    }).catch(err => {
+        console.error('Failed to copy share URL:', err);
+    });
 };
 
 const clearChain = () => {
@@ -777,6 +817,9 @@ const renderChain = () => {
 
     if (chain.length > 0) {
         chainControls.innerHTML = `
+            <button onclick="shareChain()" id="share-btn" class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 text-sm font-medium rounded-lg transition-colors shadow-sm" title="Share Progression Chain">
+                <i data-lucide="share-2" class="w-4 h-4"></i> <span id="share-text">Share</span>
+            </button>
             ${randomBtnHTML}
             <button onclick="clearChain()" class="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors">Clear All</button>
             <button onclick="${playingState.id === 'chain' ? 'stopPlayback()' : 'handlePlayChain()'}" class="flex items-center gap-1.5 px-4 py-1.5 bg-violet-500 hover:bg-violet-600 text-white text-sm font-medium rounded-lg transition-colors shadow-sm">
@@ -806,8 +849,18 @@ const renderChain = () => {
             prog.roman.forEach((num, rIdx) => {
                 const chordGlobalIdx = priorChords + rIdx;
                 const isThisChordActive = playingState.id === 'chain' && playingState.activeChordIdx === chordGlobalIdx;
-                const chordClass = isThisChordActive ? 'bg-violet-500 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400';
-                html += `<span class="px-1.5 py-0.5 rounded ${chordClass}">${num}</span>`;
+                const chordDetails = getChordDetails(num);
+
+                const chordBoxClass = isThisChordActive ? 'bg-violet-500 text-white' : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
+                const chordNameClass = isThisChordActive ? 'text-white' : 'text-slate-800 dark:text-slate-100';
+                const chordNumClass = isThisChordActive ? 'text-violet-200' : 'text-slate-500 dark:text-slate-400';
+
+                html += `
+                    <div class="flex flex-col items-center justify-center min-w-[48px] px-2 py-1 rounded ${chordBoxClass}">
+                        <span class="text-sm font-bold tracking-tight ${chordNameClass}">${chordDetails.name}</span>
+                        <span class="text-[10px] font-mono ${chordNumClass}">${num}</span>
+                    </div>
+                `;
             });
 
             html += `</div></div>`;
@@ -829,6 +882,7 @@ const renderProgressions = () => {
     const container = document.getElementById('progressions-container');
     const titleEl = document.getElementById('results-title');
     const countEl = document.getElementById('results-count');
+    const greatFitContainer = document.getElementById('great-fit-container');
 
     const currentNotes = getNoteArray();
     const rootNoteName = currentNotes[rootKeyIndex];
@@ -839,11 +893,30 @@ const renderProgressions = () => {
             const hasMatchingTag = activeTags.some(tag => p.tags.includes(tag));
             if (!hasMatchingTag) return false;
         }
+        if (filterGreatFit && chain.length > 0) {
+            if (!isCompatible(chain[chain.length - 1], p)) return false;
+        }
         return true;
     });
 
     titleEl.innerHTML = `<span class="text-violet-500 dark:text-violet-400 font-bold">${rootNoteName} ${keyType}</span> Progressions`;
     countEl.innerText = `${filteredProgressions.length} results`;
+
+    if (greatFitContainer) {
+        if (chain.length > 0) {
+            greatFitContainer.classList.remove('hidden');
+            greatFitContainer.classList.add('flex');
+        } else {
+            greatFitContainer.classList.add('hidden');
+            greatFitContainer.classList.remove('flex');
+            // If we hide the container, we should probably uncheck it
+            if (filterGreatFit) {
+                filterGreatFit = false;
+                const checkbox = document.getElementById('great-fit-filter');
+                if (checkbox) checkbox.checked = false;
+            }
+        }
+    }
 
     if (filteredProgressions.length === 0) {
         container.innerHTML = `
@@ -947,6 +1020,24 @@ const renderApp = () => {
 
 const init = () => {
     document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+
+    // Check for shared state in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const sharedState = urlParams.get('s');
+
+    if (sharedState) {
+        try {
+            const state = JSON.parse(atob(sharedState));
+            if (state.k !== undefined) rootKeyIndex = state.k;
+            if (state.t !== undefined) keyType = state.t;
+            if (state.c && Array.isArray(state.c)) {
+                chain = state.c.map(id => PROGRESSIONS_DB.find(p => p.id === id)).filter(Boolean);
+            }
+        } catch (e) {
+            console.error('Failed to parse shared state:', e);
+        }
+    }
+
     renderApp();
 };
 
