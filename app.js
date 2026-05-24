@@ -231,6 +231,34 @@ const playChordTone = (freq, startTime, duration, waveformType = 'triangle') => 
   }, (duration * 1000) + 1000);
 };
 
+const STRUM_PATTERNS = {
+    'rock': [
+        { time: 0.0, dur: 0.25, up: false },
+        { time: 0.25, dur: 0.25, up: false },
+        { time: 0.5, dur: 0.25, up: true },
+        { time: 0.75, dur: 0.25, up: false }
+    ],
+    'pop': [
+        { time: 0.0, dur: 0.25, up: false },
+        { time: 0.375, dur: 0.125, up: true },
+        { time: 0.5, dur: 0.25, up: false },
+        { time: 0.875, dur: 0.125, up: true }
+    ],
+    'funk': [
+        { time: 0.0, dur: 0.125, up: false },
+        { time: 0.125, dur: 0.125, up: true },
+        { time: 0.375, dur: 0.125, up: true },
+        { time: 0.5, dur: 0.125, up: false },
+        { time: 0.75, dur: 0.125, up: false },
+        { time: 0.875, dur: 0.125, up: true }
+    ],
+    'blues': [
+        { time: 0.0, dur: 0.33, up: false },
+        { time: 0.33, dur: 0.33, up: true },
+        { time: 0.66, dur: 0.33, up: false }
+    ]
+};
+
 const playChordGroove = (notesMidi, startTime, duration, waveformType, groove) => {
     if (groove === 'block') {
         notesMidi.forEach(midiNote => {
@@ -260,6 +288,20 @@ const playChordGroove = (notesMidi, startTime, duration, waveformType, groove) =
                 playChordTone(freq, startTime + (p * pulseDuration), dur, waveformType);
             });
         }
+    } else if (STRUM_PATTERNS[groove]) {
+        const pattern = STRUM_PATTERNS[groove];
+        const strumDelay = strumSpeed * 0.6;
+
+        pattern.forEach(hit => {
+            const hitStartTime = startTime + (hit.time * duration);
+            const hitDuration = hit.dur * duration;
+            const currentNotes = hit.up ? [...notesMidi].reverse() : notesMidi;
+
+            currentNotes.forEach((midiNote, i) => {
+                const freq = 440 * Math.pow(2, (midiNote - 69) / 12);
+                playChordTone(freq, hitStartTime + (i * strumDelay), hitDuration, waveformType);
+            });
+        });
     }
 };
 
@@ -626,7 +668,7 @@ const renderSidebar = () => {
                            class="w-full accent-violet-500 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer dark:bg-slate-700">
                 </div>
 
-                <div class="space-y-1 ${currentGroove === 'strum' ? 'block' : 'hidden'}">
+                <div class="space-y-1 ${['strum', 'rock', 'pop', 'funk', 'blues'].includes(currentGroove) ? 'block' : 'hidden'}">
                     <div class="flex justify-between items-center text-xs text-slate-500 dark:text-slate-400">
                         <span>Strum Speed</span>
                         <span id="strum-speed-label">${strumSpeed}s</span>
@@ -651,7 +693,11 @@ const renderSidebar = () => {
         { id: 'block', label: 'Block' },
         { id: 'strum', label: 'Strum' },
         { id: 'arpeggio', label: 'Arpeggio' },
-        { id: 'pulse', label: 'Pulse' }
+        { id: 'pulse', label: 'Pulse' },
+        { id: 'rock', label: 'Rock' },
+        { id: 'pop', label: 'Pop' },
+        { id: 'funk', label: 'Funk' },
+        { id: 'blues', label: 'Blues' }
     ];
 
     grooves.forEach(grv => {
